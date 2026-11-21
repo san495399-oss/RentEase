@@ -36,7 +36,17 @@ app.use(cors({
 
 app.use(express.json());
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok', app: 'RentEase API' }));
+// Health check endpoint
+app.get('/api/health', (_, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
+  res.json({
+    status: 'ok',
+    app: 'RentEase API',
+    database: dbStatus
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -60,15 +70,23 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/rentease';
+const MONGO_URI = process.env.MONGO_URI || (process.env.NODE_ENV === 'production' ? '' : 'mongodb://127.0.0.1:27017/rentease');
 
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log(`Connected to MongoDB successfully`);
-    app.listen(PORT, () => console.log(`RentEase running at http://localhost:${PORT}`));
-  })
-  .catch(err => {
-    console.error('MongoDB connection failed:', err.message);
-    console.error('Please make sure MongoDB is running or provide a valid MONGO_URI in .env');
-    process.exit(1);
-  });
+// Bind to 0.0.0.0 immediately so Render port detection and health checks succeed without timeout
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`RentEase running on port ${PORT}`);
+});
+
+// Connect to MongoDB asynchronously without crashing the server process on startup
+if (MONGO_URI) {
+  mongoose.connect(MONGO_URI)
+    .then(() => {
+      console.log('Connected to MongoDB successfully');
+    })
+    .catch(err => {
+      console.error('MongoDB connection error:', err.message);
+      console.error('Make sure your MONGO_URI in Render is correct and MongoDB Atlas Network Access allows 0.0.0.0/0');
+    });
+} else {
+  console.warn('WARNING: MONGO_URI environment variable is not set. Database features will be unavailable until set.');
+}
