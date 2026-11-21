@@ -3,10 +3,12 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
 import bookingRoutes from './routes/bookings.js';
+import { autoSeedIfEmpty } from './seed.js';
 
 dotenv.config();
 
@@ -36,7 +38,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Health check endpoint
+// Health check endpoint with database status
 app.get('/api/health', (_, res) => {
   const dbState = mongoose.connection.readyState;
   const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
@@ -53,16 +55,27 @@ app.use('/api/bookings', bookingRoutes);
 
 // Serve frontend build in production
 const clientDistPath = path.join(__dirname, '../client/dist');
-app.use(express.static(clientDistPath));
+if (fs.existsSync(clientDistPath)) {
+  console.log(`Serving frontend build from ${clientDistPath}`);
+  app.use(express.static(clientDistPath));
 
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-  res.sendFile(path.join(clientDistPath, 'index.html'), err => {
-    if (err) next();
+  app.get('*', (req, res, next) => {
+    // Avoid returning index.html for missing API endpoints or assets
+    if (req.path.startsWith('/api') || req.path.startsWith('/assets/')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath, 'index.html'));
   });
-});
+} else {
+  console.warn(`WARNING: Client dist directory not found at ${clientDistPath}`);
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.status(503).json({
+      status: 'error',
+      message: 'Frontend is still building or dist directory not found. Please verify the build step on your hosting dashboard.'
+    });
+  });
+}
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -72,7 +85,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || (process.env.NODE_ENV === 'production' ? '' : 'mongodb://127.0.0.1:27017/rentease');
 
-// Bind to 0.0.0.0 immediately so Render port detection and health checks succeed without timeout
+// Bind to 0.0.0.0 immediately so Render port detection and health checks succeed
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`RentEase running on port ${PORT}`);
 });
@@ -80,8 +93,9 @@ app.listen(PORT, '0.0.0.0', () => {
 // Connect to MongoDB asynchronously without crashing the server process on startup
 if (MONGO_URI) {
   mongoose.connect(MONGO_URI)
-    .then(() => {
+    .then(async () => {
       console.log('Connected to MongoDB successfully');
+      await autoSeedIfEmpty();
     })
     .catch(err => {
       console.error('MongoDB connection error:', err.message);

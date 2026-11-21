@@ -3,13 +3,53 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import User from './models/User.js';
 import Product from './models/Product.js';
+
 dotenv.config();
-const products = [["Apple iPhone 15", "Mobiles", "Apple", "A powerful everyday smartphone with a vivid display and excellent cameras.", 799, "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=900", true, 5000], ["Samsung Galaxy S24", "Mobiles", "Samsung", "A compact flagship Android phone for work, photos and entertainment.", 699, "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=900", true, 4500], ["MacBook Air M2", "Laptops", "Apple", "Lightweight laptop for study, creative work and everyday productivity.", 1299, "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=900", true, 8000], ["Dell XPS 13", "Laptops", "Dell", "Premium compact laptop with a sharp display and comfortable keyboard.", 1099, "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=900", false, 7000], ["iPad Air", "Tablets", "Apple", "Versatile tablet for notes, drawing, reading and streaming.", 599, "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=900", true, 4000], ["Samsung Galaxy Tab S9", "Tablets", "Samsung", "Large-screen Android tablet for multitasking and media.", 549, "https://images.unsplash.com/photo-1561157136-8bca6e9f6b4d?w=900", false, 3500], ["Sony Alpha A6400", "Cameras", "Sony", "Mirrorless camera for travel, portraits and content creation.", 999, "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900", true, 9000], ["GoPro HERO12", "Cameras", "GoPro", "Rugged action camera for adventures, sports and underwater footage.", 499, "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=900", false, 3000], ["Apple Watch Series 9", "Accessories", "Apple", "Smartwatch for notifications, workouts and daily tracking.", 299, "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?w=900", false, 2000], ["Sony WH-1000XM5", "Accessories", "Sony", "Wireless noise-cancelling headphones for focused listening.", 249, "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=900", true, 1500]];
-await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/rentease');
-await Product.deleteMany({});
-await Product.insertMany(products.map(([name,category,brand,description,pricePerDay,image,featured,deposit]) => ({name,category,brand,description,pricePerDay,image,featured,deposit,stock:3})));
-const email = 'demo@rentease.com';
-await User.deleteOne({email});
-await User.create({name:'Demo User',email,password:await bcrypt.hash('password123',10)});
-console.log('Seed complete. Demo login: demo@rentease.com / password123');
-await mongoose.disconnect();
+
+export const defaultProducts = [
+  ["Apple iPhone 15", "Mobiles", "Apple", "A powerful everyday smartphone with a vivid display and excellent cameras.", 799, "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=900", true, 5000],
+  ["Samsung Galaxy S24", "Mobiles", "Samsung", "A compact flagship Android phone for work, photos and entertainment.", 699, "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=900", true, 4500],
+  ["MacBook Air M2", "Laptops", "Apple", "Lightweight laptop for study, creative work and everyday productivity.", 1299, "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=900", true, 8000],
+  ["Dell XPS 13", "Laptops", "Dell", "Premium compact laptop with a sharp display and comfortable keyboard.", 1099, "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=900", false, 7000],
+  ["iPad Air", "Tablets", "Apple", "Versatile tablet for notes, drawing, reading and streaming.", 599, "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=900", true, 4000],
+  ["Samsung Galaxy Tab S9", "Tablets", "Samsung", "Large-screen Android tablet for multitasking and media.", 549, "https://images.unsplash.com/photo-1561157136-8bca6e9f6b4d?w=900", false, 3500],
+  ["Sony Alpha A6400", "Cameras", "Sony", "Mirrorless camera for travel, portraits and content creation.", 999, "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900", true, 9000],
+  ["GoPro HERO12", "Cameras", "GoPro", "Rugged action camera for adventures, sports and underwater footage.", 499, "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=900", false, 3000],
+  ["Apple Watch Series 9", "Accessories", "Apple", "Smartwatch for notifications, workouts and daily tracking.", 299, "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?w=900", false, 2000],
+  ["Sony WH-1000XM5", "Accessories", "Sony", "Wireless noise-cancelling headphones for focused listening.", 249, "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=900", true, 1500]
+];
+
+export async function autoSeedIfEmpty() {
+  try {
+    const count = await Product.countDocuments();
+    if (count === 0) {
+      console.log('Database empty: auto-seeding products and demo user...');
+      await Product.insertMany(defaultProducts.map(([name,category,brand,description,pricePerDay,image,featured,deposit]) => ({name,category,brand,description,pricePerDay,image,featured,deposit,stock:3})));
+      const email = 'demo@rentease.com';
+      const userExists = await User.findOne({ email });
+      if (!userExists) {
+        await User.create({name:'Demo User',email,password:await bcrypt.hash('password123',10)});
+      }
+      console.log('Auto-seed completed successfully!');
+    }
+  } catch (err) {
+    console.error('Auto-seed check failed:', err.message);
+  }
+}
+
+// If run directly: node seed.js
+if (process.argv[1] && process.argv[1].endsWith('seed.js')) {
+  try {
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/rentease');
+    await Product.deleteMany({});
+    await Product.insertMany(defaultProducts.map(([name,category,brand,description,pricePerDay,image,featured,deposit]) => ({name,category,brand,description,pricePerDay,image,featured,deposit,stock:3})));
+    const email = 'demo@rentease.com';
+    await User.deleteOne({email});
+    await User.create({name:'Demo User',email,password:await bcrypt.hash('password123',10)});
+    console.log('Seed complete. Demo login: demo@rentease.com / password123');
+    await mongoose.disconnect();
+  } catch (err) {
+    console.error('Seed error:', err.message);
+    process.exit(1);
+  }
+}
